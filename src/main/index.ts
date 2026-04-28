@@ -1,6 +1,6 @@
 import { app, BrowserWindow, globalShortcut, Tray, Menu, nativeImage, ipcMain, clipboard, nativeTheme, screen, shell } from 'electron'
 import { execFileSync } from 'child_process'
-import { existsSync, readFileSync } from 'fs'
+import { existsSync, mkdirSync, readFileSync } from 'fs'
 import { join } from 'path'
 import { electronApp } from '@electron-toolkit/utils'
 import { initDatabase, saveDbNow } from './store/database'
@@ -22,9 +22,10 @@ import {
 } from './store/clipboard'
 import { startClipboardWatcher, stopClipboardWatcher, suppressNextClipboardCapture } from './clipboard/watcher'
 import {
-  getFrontmostAppName,
+  capturePasteTargetContext,
   pasteIntoPreviousTarget,
 } from './clipboard/active-app'
+import type { PasteTargetContext } from './clipboard/active-app'
 import { getClipboardNativeImage } from './system/clipboard-preview'
 import {
   getStoredClipboardImagePreview,
@@ -49,15 +50,34 @@ let suppressSettingsBlurCloseUntil = 0
 let windowPositionPersistTimer: ReturnType<typeof setTimeout> | null = null
 let pendingWindowPosition: { x: number; y: number } | null = null
 let isQuittingAfterFlush = false
-let selectionPasteContext: { shouldPaste: boolean; previousAppName: string | null } = {
+let selectionPasteContext: { shouldPaste: boolean; previousTarget: PasteTargetContext | null } = {
   shouldPaste: false,
-  previousAppName: null
+  previousTarget: null
 }
 const SETTINGS_WINDOW_WIDTH = 456
 const SETTINGS_WINDOW_HEIGHT = 620
 const IMAGE_FILE_PATH_PATTERN = /\.(png|jpe?g|gif|webp|heic|svg|bmp|tiff?|ico|avif)$/i
 const WINDOW_BG_LIGHT = '#F6F7F9'
 const WINDOW_BG_DARK = '#1C1F24'
+
+function configureSessionDataPath(): void {
+  if (process.platform !== 'win32') return
+
+  try {
+    const tempRoot = app.getPath('temp')
+    const sessionDataPath = join(
+      tempRoot,
+      'shear-plate',
+      app.isPackaged ? 'session-data' : `session-data-dev-${process.pid}`
+    )
+    mkdirSync(sessionDataPath, { recursive: true })
+    app.setPath('sessionData', sessionDataPath)
+  } catch (error) {
+    console.warn('[ShearPlate] Failed to configure sessionData path:', error)
+  }
+}
+
+configureSessionDataPath()
 
 function isImageFilePath(filePath: string | null | undefined): boolean {
   if (!filePath) return false
@@ -98,7 +118,7 @@ export function getMainWindow(): BrowserWindow | null {
 }
 
 function resetSelectionPasteContext(): void {
-  selectionPasteContext = { shouldPaste: false, previousAppName: null }
+  selectionPasteContext = { shouldPaste: false, previousTarget: null }
 }
 
 function suppressPanelBlurHide(durationMs = 320): void {
@@ -109,7 +129,7 @@ function suppressSettingsBlurClose(durationMs = 320): void {
   suppressSettingsBlurCloseUntil = Date.now() + durationMs
 }
 
-function hidePanel(options?: { resetPasteContext?: boolean; hideApp?: boolean }): void {
+function hidePanel(options?: { resetPasteContext?: boolean; hideApp?: boolean; forPasteRelay?: boolean }): void {
   if (!mainWindow || mainWindow.isDestroyed()) return
 
   const [x, y] = mainWindow.getPosition()
@@ -122,6 +142,10 @@ function hidePanel(options?: { resetPasteContext?: boolean; hideApp?: boolean })
     width,
     height
   })
+
+  if (process.platform === 'win32' && options?.forPasteRelay) {
+    mainWindow.blur()
+  }
 
   mainWindow.hide()
   if (process.platform === 'darwin' && options?.hideApp !== false) {
@@ -491,15 +515,33 @@ function resolveResourcePath(fileName: string): string | null {
 }
 
 function createTrayImage() {
-  if (process.platform === 'darwin') {
-    const templateIconPath = resolveResourcePath('trayTemplate.png')
-    if (templateIconPath) {
-      const templateIcon = nativeImage.createFromPath(templateIconPath)
-      if (!templateIcon.isEmpty()) {
-        templateIcon.setTemplateImage(true)
-        return templateIcon
-      }
+  const loadRasterIcon = (fileName: string, options?: { template?: boolean; resize?: boolean }): Electron.NativeImage | null => {
+    const iconPath = resolveResourcePath(fileName)
+    if (!iconPath) return null
+    const icon = nativeImage.createFromPath(iconPath)
+    if (icon.isEmpty()) return null
+
+    const shouldResize = options?.resize ?? true
+    const nextIcon = shouldResize ? icon.resize({ width: 18, height: 18 }) : icon
+    if (options?.template) {
+      nextIcon.setTemplateImage(true)
     }
+    return nextIcon
+  }
+
+  if (process.platform === 'darwin') {
+    const templateIcon =
+      loadRasterIcon('trayTemplate.png', { template: true, resize: false }) ??
+      loadRasterIcon('trayTemplate@2x.png', { template: true, resize: false })
+    if (templateIcon) return templateIcon
+  }
+
+  if (process.platform === 'win32') {
+    const windowsIcon =
+      loadRasterIcon('icons/icon.ico') ??
+      loadRasterIcon('icons/icon.png') ??
+      loadRasterIcon('trayTemplate.png')
+    if (windowsIcon) return windowsIcon
   }
 
   const trayIconPath = resolveResourcePath('tray-icon.svg')
@@ -522,6 +564,12 @@ function createTrayImage() {
       return icon.resize({ width: 18, height: 18 })
     }
   }
+
+  const fallbackIcon =
+    loadRasterIcon('trayTemplate.png') ??
+    loadRasterIcon('trayTemplate@2x.png') ??
+    loadRasterIcon('icons/icon.png')
+  if (fallbackIcon) return fallbackIcon
 
   throw new Error('Unable to load tray icon from resources/')
 }
@@ -618,7 +666,7 @@ function showPanel() {
   const settings = getAppSettings()
   selectionPasteContext = {
     shouldPaste: true,
-    previousAppName: process.platform === 'darwin' ? getFrontmostAppName() : null
+    previousTarget: capturePasteTargetContext()
   }
   const { width, height } = getPanelSize()
   console.log('[ShearPlate] showPanel() before show', {
@@ -627,11 +675,27 @@ function showPanel() {
     width,
     height
   })
-  mainWindow.setSize(width, height, false)
+  const [currentWidth, currentHeight] = mainWindow.getSize()
+  if (currentWidth !== width || currentHeight !== height) {
+    mainWindow.setSize(width, height, false)
+  }
+  if (mainWindow.isMinimized()) {
+    mainWindow.restore()
+  }
   positionWindow(mainWindow, settings, { width, height, reservedWidth: PANEL_FULL_WIDTH })
   mainWindow.show()
   mainWindow.focus()
   mainWindow.moveTop()
+
+  if (process.platform !== 'darwin') {
+    mainWindow.setAlwaysOnTop(true)
+    setTimeout(() => {
+      if (!mainWindow || mainWindow.isDestroyed()) return
+      mainWindow.setAlwaysOnTop(false)
+    }, 40)
+    return
+  }
+
   mainWindow.setAlwaysOnTop(true, 'floating')
   if (process.platform === 'darwin') {
     mainWindow.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true })
@@ -718,18 +782,21 @@ async function commitSelection(item: ClipboardItem): Promise<boolean> {
 
   shell.beep()
   const shouldPaste = selectionPasteContext.shouldPaste
-  const previousAppName = selectionPasteContext.previousAppName
-  hidePanel({ resetPasteContext: false })
+  const previousTarget = selectionPasteContext.previousTarget
+  hidePanel({ resetPasteContext: false, forPasteRelay: shouldPaste })
   resetSelectionPasteContext()
 
   if (shouldPaste) {
-    const pasteDelayMs = process.platform === 'darwin'
-      ? usedRichClipboardPayload ? 180 : 90
-      : usedRichClipboardPayload ? 160 : 90
+    const pasteDelayMs =
+      process.platform === 'darwin'
+        ? usedRichClipboardPayload ? 180 : 90
+        : process.platform === 'win32'
+          ? usedRichClipboardPayload ? 45 : 22
+          : usedRichClipboardPayload ? 120 : 70
     await new Promise((resolve) => setTimeout(resolve, pasteDelayMs))
-    const pasted = await pasteIntoPreviousTarget(previousAppName)
+    const pasted = await pasteIntoPreviousTarget(previousTarget)
     if (!pasted) {
-      console.warn('[ShearPlate] Paste relay did not complete successfully', { previousAppName })
+      console.warn('[ShearPlate] Paste relay did not complete successfully', { previousTarget })
     }
   }
 

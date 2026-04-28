@@ -2,6 +2,7 @@ import { getDb, saveDb } from './database'
 import type { AppSettings } from '../../shared/types'
 import { DEFAULT_APP_SETTINGS } from '../../shared/types'
 
+const LEGACY_DEFAULT_SHORTCUT = 'CommandOrControl+Shift+V'
 const LEGACY_SETTING_KEYS = ['minimalMode', 'showSourceAppIcon']
 const SETTING_KEYS: (keyof AppSettings)[] = [
   'theme',
@@ -58,6 +59,15 @@ function ensureDefaults(): void {
     const result = getDb().exec(`SELECT value FROM app_settings WHERE key = ? LIMIT 1`, [key])
     if (!result.length || !result[0].values.length) {
       upsertSetting(key, DEFAULT_APP_SETTINGS[key])
+      needsSave = true
+    }
+  }
+
+  const shortcutValue = getDb().exec(`SELECT value FROM app_settings WHERE key = 'shortcut' LIMIT 1`)
+  if (shortcutValue.length && shortcutValue[0].values.length) {
+    const currentShortcut = String(shortcutValue[0].values[0][0] ?? '')
+    if (currentShortcut === LEGACY_DEFAULT_SHORTCUT) {
+      upsertSetting('shortcut', DEFAULT_APP_SETTINGS.shortcut)
       needsSave = true
     }
   }
