@@ -1,0 +1,38 @@
+<svg width="1024" height="1024" viewBox="0 0 1024 1024" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <rect width="1024" height="1024" rx="232" fill="url(#bg)"/>
+  <rect x="142" y="166" width="740" height="692" rx="144" fill="url(#panel)" stroke="white" stroke-opacity="0.16"/>
+  <rect x="222" y="126" width="580" height="118" rx="58" fill="url(#clip)" stroke="white" stroke-opacity="0.18"/>
+  <path d="M330 320C330 292.386 352.386 270 380 270H688C715.614 270 738 292.386 738 320V700C738 727.614 715.614 750 688 750H380C352.386 750 330 727.614 330 700V320Z" fill="url(#sheetTop)"/>
+  <path d="M286 368C286 340.386 308.386 318 336 318H644C671.614 318 694 340.386 694 368V748C694 775.614 671.614 798 644 798H336C308.386 798 286 775.614 286 748V368Z" fill="url(#sheetBottom)" stroke="#0E1726" stroke-opacity="0.06"/>
+  <path d="M597.301 402C639.844 402 674.485 436.01 674.485 477.822C674.485 500.724 663.821 522.115 645.395 536.399L501.879 647.664C490.061 656.828 475.406 661.781 460.311 661.781C423.22 661.781 392.269 634.327 388.111 598.612L460.399 598.61C462.99 609.616 472.942 617.87 484.828 617.87C490.158 617.87 495.331 616.124 499.522 612.87L596.842 537.406H438.927C396.384 537.406 361.742 503.396 361.742 461.584C361.742 419.772 396.384 385.762 438.927 385.762H629.561L584.597 420.645C580.145 417.015 574.432 414.843 568.256 414.843H452.374C440.488 414.843 430.536 423.096 427.944 434.104H585.859C590.194 434.104 594.328 434.866 598.151 436.261L643.115 401.378C628.984 396.946 613.93 394.503 598.301 394.503L597.301 402Z" fill="url(#mark)"/>
+  <circle cx="352" cy="382" r="18" fill="white" fill-opacity="0.3"/>
+  <circle cx="402" cy="382" r="18" fill="white" fill-opacity="0.16"/>
+  <circle cx="452" cy="382" r="18" fill="white" fill-opacity="0.16"/>
+  <defs>
+    <linearGradient id="bg" x1="140" y1="94" x2="880" y2="930" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#1C232E"/>
+      <stop offset="0.5" stop-color="#2D3644"/>
+      <stop offset="1" stop-color="#131923"/>
+    </linearGradient>
+    <linearGradient id="panel" x1="188" y1="190" x2="808" y2="816" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#313A49" stop-opacity="0.88"/>
+      <stop offset="1" stop-color="#202735" stop-opacity="0.96"/>
+    </linearGradient>
+    <linearGradient id="clip" x1="263" y1="135" x2="764" y2="247" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#4B5668"/>
+      <stop offset="1" stop-color="#313A47"/>
+    </linearGradient>
+    <linearGradient id="sheetTop" x1="374" y1="294" x2="702" y2="734" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#F4F7FB"/>
+      <stop offset="1" stop-color="#D5DDE8"/>
+    </linearGradient>
+    <linearGradient id="sheetBottom" x1="316" y1="342" x2="664" y2="790" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#E9EEF5"/>
+      <stop offset="1" stop-color="#C5CEDB"/>
+    </linearGradient>
+    <linearGradient id="mark" x1="388" y1="410" x2="664" y2="638" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2D3643"/>
+      <stop offset="1" stop-color="#6A768A"/>
+    </linearGradient>
+  </defs>
+</svg>
