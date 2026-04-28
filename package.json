@@ -8,7 +8,58 @@
     "build": "electron-vite build",
     "preview": "electron-vite preview",
     "postinstall": "electron-builder install-app-deps",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "dist:win": "npm run build && electron-builder --win portable --x64 --publish never"
+  },
+  "build": {
+    "appId": "com.wayhim.shearplate",
+    "productName": "ShearPlate",
+    "icon": "resources/icons/icon.png",
+    "compression": "maximum",
+    "electronLanguages": [
+      "en-US",
+      "zh-CN"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "out/**/*",
+      "node_modules/**/*",
+      "package.json",
+      "!**/*.map",
+      "!**/*.md",
+      "!**/*.markdown",
+      "!node_modules/**/{test,tests,__tests__,example,examples,doc,docs}/**",
+      "!node_modules/sql.js/dist/*debug*",
+      "!node_modules/lucide-react/dist/umd/**",
+      "!**/.git/**",
+      "!**/.idea/**",
+      "!**/.playwright-mcp/**",
+      "!**/arboard/**",
+      "!**/docs/**"
+    ],
+    "extraResources": [
+      {
+        "from": "resources",
+        "to": "resources"
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.productivity",
+      "identity": "-",
+      "icon": "resources/icons/icon.icns",
+      "extendInfo": {
+        "LSUIElement": true
+      }
+    },
+    "win": {
+      "icon": "resources/icons/icon.ico",
+      "target": [
+        "portable"
+      ]
+    }
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.1",

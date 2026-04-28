@@ -15,6 +15,23 @@ let activeSavePromise: Promise<void> | null = null
 const SAVE_DEBOUNCE_MS = 160
 const SAVE_CHUNK_SIZE_BYTES = 512 * 1024
 
+function resolveSqlWasmPath(): string {
+  const candidates = [
+    join(process.resourcesPath, 'resources', 'sql-wasm.wasm'),
+    join(process.resourcesPath, 'sql-wasm.wasm'),
+    join(app.getAppPath(), 'resources', 'sql-wasm.wasm'),
+    join(__dirname, '../../resources/sql-wasm.wasm')
+  ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return join(__dirname, '../../resources/sql-wasm.wasm')
+}
+
 function hasColumn(table: string, column: string): boolean {
   const result = db.exec(`PRAGMA table_info(${table})`)
   if (!result.length) return false
@@ -63,7 +80,7 @@ function migrateClipboardTable(): void {
 }
 
 export async function initDatabase(): Promise<void> {
-  const wasmPath = join(__dirname, '../../resources/sql-wasm.wasm')
+  const wasmPath = resolveSqlWasmPath()
   const SQL = await initSqlJs({
     locateFile: () => wasmPath
   })

@@ -35,7 +35,7 @@ import { getFilePreviewData } from './system/file-preview'
 import { DEFAULT_APP_SETTINGS } from '../shared/types'
 import type { ClipboardItem } from '../shared/types'
 import { getAppSettings, updateAppSettings } from './store/settings'
-import type { AppSettings } from '../shared/types'
+import type { AppSettings, ThemeMode } from '../shared/types'
 import { PANEL_FULL_WIDTH, PANEL_HEIGHT } from '../shared/layout'
 
 let mainWindow: BrowserWindow | null = null
@@ -56,10 +56,41 @@ let selectionPasteContext: { shouldPaste: boolean; previousAppName: string | nul
 const SETTINGS_WINDOW_WIDTH = 456
 const SETTINGS_WINDOW_HEIGHT = 620
 const IMAGE_FILE_PATH_PATTERN = /\.(png|jpe?g|gif|webp|heic|svg|bmp|tiff?|ico|avif)$/i
+const WINDOW_BG_LIGHT = '#F6F7F9'
+const WINDOW_BG_DARK = '#1C1F24'
 
 function isImageFilePath(filePath: string | null | undefined): boolean {
   if (!filePath) return false
   return IMAGE_FILE_PATH_PATTERN.test(filePath)
+}
+
+function getSafeSettings(): AppSettings {
+  try {
+    return getAppSettings()
+  } catch {
+    return DEFAULT_APP_SETTINGS
+  }
+}
+
+function resolveEffectiveTheme(theme: ThemeMode): 'light' | 'dark' {
+  if (theme === 'system') {
+    return nativeTheme.shouldUseDarkColors ? 'dark' : 'light'
+  }
+  return theme
+}
+
+function getWindowBackgroundColor(settings = getSafeSettings()): string {
+  return resolveEffectiveTheme(settings.theme) === 'dark' ? WINDOW_BG_DARK : WINDOW_BG_LIGHT
+}
+
+function applyWindowBackgroundColor(settings = getSafeSettings()): void {
+  const color = getWindowBackgroundColor(settings)
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.setBackgroundColor(color)
+  }
+  if (settingsWindow && !settingsWindow.isDestroyed()) {
+    settingsWindow.setBackgroundColor(color)
+  }
 }
 
 export function getMainWindow(): BrowserWindow | null {
@@ -350,10 +381,10 @@ function createWindow(): BrowserWindow {
     show: false,
     frame: false,
     transparent: false,
-    hasShadow: true,
+    hasShadow: false,
     resizable: true,
     skipTaskbar: true,
-    backgroundColor: '#0f1115',
+    backgroundColor: getWindowBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -412,13 +443,13 @@ function createSettingsWindow(): BrowserWindow {
     show: false,
     frame: false,
     transparent: false,
-    hasShadow: true,
+    hasShadow: false,
     resizable: false,
     minimizable: false,
     maximizable: false,
     fullscreenable: false,
     skipTaskbar: true,
-    backgroundColor: '#0f1115',
+    backgroundColor: getWindowBackgroundColor(),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false,
@@ -569,10 +600,6 @@ function showSettingsWindow(): void {
     settingsWindow = createSettingsWindow()
   }
 
-  if (process.platform === 'darwin') {
-    app.show()
-  }
-
   settingsWindow.setSize(SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT, false)
   positionStandaloneWindow(settingsWindow, SETTINGS_WINDOW_WIDTH, SETTINGS_WINDOW_HEIGHT)
   settingsWindow.show()
@@ -600,9 +627,6 @@ function showPanel() {
     width,
     height
   })
-  if (process.platform === 'darwin') {
-    app.show()
-  }
   mainWindow.setSize(width, height, false)
   positionWindow(mainWindow, settings, { width, height, reservedWidth: PANEL_FULL_WIDTH })
   mainWindow.show()
@@ -765,6 +789,7 @@ ipcMain.handle('settings:update', (_e, partial: Partial<AppSettings>) => {
     if (currentSettings.shortcut !== nextShortcut) {
       console.log(`[ShearPlate] Shortcut updated to ${nextShortcut}`)
     }
+    applyWindowBackgroundColor(next)
     broadcastSettingsChanged(next)
     return next
   }
@@ -773,6 +798,7 @@ ipcMain.handle('settings:update', (_e, partial: Partial<AppSettings>) => {
   if (normalizedPartial.maxHistory !== undefined || normalizedPartial.historyRetentionDays !== undefined) {
     applyClipboardRetentionPolicy()
   }
+  applyWindowBackgroundColor(next)
   broadcastSettingsChanged(next)
   return next
 })
@@ -840,6 +866,12 @@ app.whenReady().then(async () => {
     app.dock.hide()
   }
   registerClipboardImageProtocol()
+  nativeTheme.on('updated', () => {
+    const settings = getSafeSettings()
+    if (settings.theme === 'system') {
+      applyWindowBackgroundColor(settings)
+    }
+  })
   console.log('[ShearPlate] App ready, initializing...')
 
   try {

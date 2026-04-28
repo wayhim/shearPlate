@@ -1,6 +1,8 @@
 node_modules/
 out/
+release/
 .idea/
 .playwright-mcp/
+resources/iconset/
 .DS_Store
 *.log
