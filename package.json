@@ -1,6 +1,6 @@
 {
   "name": "shear-plate",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Cross-device clipboard sync tool",
   "main": "./out/main/index.js",
   "scripts": {
