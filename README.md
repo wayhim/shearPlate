@@ -145,6 +145,14 @@ open release/mac-arm64/ShearPlate.app
 
 If you want the app to behave like a normal installed app, copy `release/mac-arm64/ShearPlate.app` into `/Applications/ShearPlate.app` and launch that version.
 
+If macOS reports the app is damaged, you can remove the quarantine flag as a temporary workaround:
+
+```bash
+# Move the app to Applications first
+xattr -dr com.apple.quarantine /Applications/ShearPlate.app
+open /Applications/ShearPlate.app
+```
+
 ## macOS Permissions
 
 Automatic paste-back into the previous app depends on macOS permissions.
