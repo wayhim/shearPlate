@@ -223,22 +223,46 @@ export function applyClipboardRetentionPolicy(): void {
   }
 }
 
-export function getClipboardItems(limit = 100, offset = 0): ClipboardItem[] {
+export type ClipboardListFilter = 'all' | ContentType | 'starred' | 'snippet'
+
+function resolveFilterClause(filter: ClipboardListFilter): { clause: string; params: Array<string | number> } {
+  switch (filter) {
+    case 'text':
+    case 'image':
+    case 'file':
+      return { clause: 'content_type = ?', params: [filter] }
+    case 'starred':
+      return { clause: 'is_starred = 1', params: [] }
+    case 'snippet':
+      return { clause: 'is_snippet = 1', params: [] }
+    default:
+      return { clause: '1 = 1', params: [] }
+  }
+}
+
+export function getClipboardItems(limit = 100, offset = 0, filter: ClipboardListFilter = 'all'): ClipboardItem[] {
+  const { clause, params } = resolveFilterClause(filter)
   const results = getDb().exec(
-    `SELECT ${LIST_SELECT_COLUMNS} FROM clipboard_items ORDER BY created_at DESC LIMIT ? OFFSET ?`,
-    [limit, offset]
+    `SELECT ${LIST_SELECT_COLUMNS}
+     FROM clipboard_items
+     WHERE ${clause}
+     ORDER BY created_at DESC
+     LIMIT ? OFFSET ?`,
+    [...params, limit, offset]
   )
   if (!results.length) return []
   return results[0].values.map(rowToItem)
 }
 
-export function searchClipboardItems(query: string, limit = 50): ClipboardItem[] {
+export function searchClipboardItems(query: string, limit = 50, filter: ClipboardListFilter = 'all'): ClipboardItem[] {
   const exactQuery = query.trim().toLowerCase()
   const fuzzyQuery = `%${query}%`
+  const { clause, params: filterParams } = resolveFilterClause(filter)
   const results = getDb().exec(
     `SELECT ${LIST_SELECT_COLUMNS}
      FROM clipboard_items
-     WHERE text_content LIKE ? OR source_app LIKE ? OR COALESCE(snippet_keyword, '') LIKE ?
+     WHERE ${clause}
+       AND (text_content LIKE ? OR source_app LIKE ? OR COALESCE(snippet_keyword, '') LIKE ?)
      ORDER BY
        CASE
          WHEN is_snippet = 1 AND LOWER(COALESCE(snippet_keyword, '')) = ? THEN 0
@@ -249,7 +273,7 @@ export function searchClipboardItems(query: string, limit = 50): ClipboardItem[]
        END ASC,
        created_at DESC
      LIMIT ?`,
-    [fuzzyQuery, fuzzyQuery, fuzzyQuery, exactQuery, `${exactQuery}%`, `%${exactQuery}%`, limit]
+    [...filterParams, fuzzyQuery, fuzzyQuery, fuzzyQuery, exactQuery, `${exactQuery}%`, `%${exactQuery}%`, limit]
   )
   if (!results.length) return []
   return results[0].values.map(rowToItem)

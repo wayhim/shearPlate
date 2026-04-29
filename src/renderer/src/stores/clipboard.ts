@@ -4,6 +4,34 @@ import type { ClipboardItem, ContentType, ThemeMode } from '../../../shared/type
 export type FilterType = 'all' | ContentType | 'starred' | 'snippet'
 const DEFAULT_INITIAL_LOAD_SIZE = 50
 
+function matchesFilter(item: ClipboardItem, filter: FilterType): boolean {
+  switch (filter) {
+    case 'all':
+      return true
+    case 'text':
+    case 'image':
+    case 'file':
+      return item.contentType === filter
+    case 'starred':
+      return item.isStarred
+    case 'snippet':
+      return item.isSnippet
+    default:
+      return true
+  }
+}
+
+function appendUniqueById(currentItems: ClipboardItem[], nextItems: ClipboardItem[]): ClipboardItem[] {
+  const existingIds = new Set(currentItems.map((item) => item.id))
+  const merged = [...currentItems]
+  for (const item of nextItems) {
+    if (existingIds.has(item.id)) continue
+    existingIds.add(item.id)
+    merged.push(item)
+  }
+  return merged
+}
+
 interface ClipboardState {
   items: ClipboardItem[]
   query: string
@@ -24,9 +52,9 @@ interface ClipboardState {
   setTheme: (theme: ThemeMode) => void
   setLoading: (loading: boolean) => void
 
-  fetchItems: (limit?: number) => Promise<void>
+  fetchItems: (limit?: number, nextFilter?: FilterType) => Promise<void>
   loadMoreItems: () => Promise<void>
-  searchItems: (query: string) => Promise<void>
+  searchItems: (query: string, nextFilter?: FilterType) => Promise<void>
   handleToggleStar: (id: string) => Promise<void>
   handleSnippetUpdate: (id: string, isSnippet: boolean, keyword: string | null) => Promise<ClipboardItem | null>
   handleCreateSnippet: (keyword: string, content: string) => Promise<ClipboardItem | null>
@@ -45,9 +73,17 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
   setItems: (items) => set({ items }),
   addItem: (item) =>
-    set((s) => ({
-      items: [item, ...s.items.filter((i) => i.id !== item.id && i.contentHash !== item.contentHash)]
-    })),
+    set((s) => {
+      if (s.query.trim() || !matchesFilter(item, s.filter)) {
+        return s
+      }
+
+      const nextItems = [item, ...s.items.filter((i) => i.id !== item.id && i.contentHash !== item.contentHash)]
+      return {
+        items: nextItems,
+        loadedCount: nextItems.length
+      }
+    }),
   removeItem: (id) => set((s) => ({ items: s.items.filter((i) => i.id !== id) })),
   toggleStar: (id) =>
     set((s) => ({
@@ -62,22 +98,11 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
   setTheme: (theme) => set({ theme }),
   setLoading: (loading) => set({ loading }),
 
-  fetchItems: async (limit = DEFAULT_INITIAL_LOAD_SIZE) => {
+  fetchItems: async (limit = DEFAULT_INITIAL_LOAD_SIZE, nextFilter?: FilterType) => {
     set({ loading: true })
     try {
-      const { filter } = get()
-      let items: ClipboardItem[]
-      if (filter === 'starred') {
-        items = await window.api.store.getStarred()
-        set({ items, loading: false, loadingMore: false, hasMore: false, loadedCount: items.length })
-        return
-      } else if (filter === 'snippet') {
-        items = await window.api.store.getSnippets()
-        set({ items, loading: false, loadingMore: false, hasMore: false, loadedCount: items.length })
-        return
-      } else {
-        items = await window.api.store.getItems(limit, 0)
-      }
+      const effectiveFilter = nextFilter ?? get().filter
+      const items = await window.api.store.getItems(limit, 0, effectiveFilter)
       set({
         items,
         loading: false,
@@ -94,13 +119,12 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     const { query, filter, loading, loadingMore, loadedCount } = get()
     if (loading || loadingMore) return
     if (query.trim()) return
-    if (filter === 'starred' || filter === 'snippet') return
 
     set({ loadingMore: true })
     try {
-      const nextItems = await window.api.store.getItems(DEFAULT_INITIAL_LOAD_SIZE, loadedCount)
+      const nextItems = await window.api.store.getItems(DEFAULT_INITIAL_LOAD_SIZE, loadedCount, filter)
       set((state) => ({
-        items: [...state.items, ...nextItems.filter((item) => !state.items.some((existing) => existing.id === item.id))],
+        items: appendUniqueById(state.items, nextItems),
         loadingMore: false,
         hasMore: nextItems.length >= DEFAULT_INITIAL_LOAD_SIZE,
         loadedCount: loadedCount + nextItems.length
@@ -110,13 +134,14 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     }
   },
 
-  searchItems: async (query: string) => {
+  searchItems: async (query: string, nextFilter?: FilterType) => {
     if (!query.trim()) {
-      return get().fetchItems()
+      return get().fetchItems(DEFAULT_INITIAL_LOAD_SIZE, nextFilter)
     }
     set({ loading: true })
     try {
-      const items = await window.api.store.searchItems(query)
+      const effectiveFilter = nextFilter ?? get().filter
+      const items = await window.api.store.searchItems(query, effectiveFilter)
       set({ items, loading: false, loadingMore: false, hasMore: false, loadedCount: items.length })
     } catch {
       set({ loading: false })
@@ -137,9 +162,9 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
     const { filter, query } = get()
     if (query.trim() || filter === 'snippet' || !updated) {
       if (query.trim()) {
-        await get().searchItems(query)
+        await get().searchItems(query, filter)
       } else {
-        await get().fetchItems()
+        await get().fetchItems(DEFAULT_INITIAL_LOAD_SIZE, filter)
       }
       return updated
     }
@@ -154,16 +179,16 @@ export const useClipboardStore = create<ClipboardState>((set, get) => ({
 
     const { filter, query } = get()
     if (query.trim()) {
-      await get().searchItems(query)
+      await get().searchItems(query, filter)
       return created
     }
 
-    if (filter === 'all' || filter === 'text' || filter === 'snippet') {
+    if (matchesFilter(created, filter)) {
       get().addItem(created)
       return created
     }
 
-    await get().fetchItems()
+    await get().fetchItems(DEFAULT_INITIAL_LOAD_SIZE, filter)
     return created
   },
 

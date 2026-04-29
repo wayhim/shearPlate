@@ -1,5 +1,7 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { ClipboardItem, ThemeMode, AppSettings } from '../shared/types'
+import type { ClipboardItem, ContentType, ThemeMode, AppSettings } from '../shared/types'
+
+type StoreFilter = 'all' | ContentType | 'starred' | 'snippet'
 
 const api = {
   clipboard: {
@@ -15,14 +17,14 @@ const api = {
     }
   },
   store: {
-    getItems: (limit?: number, offset?: number): Promise<ClipboardItem[]> =>
-      ipcRenderer.invoke('store:get-items', limit, offset),
+    getItems: (limit?: number, offset?: number, filter?: StoreFilter): Promise<ClipboardItem[]> =>
+      ipcRenderer.invoke('store:get-items', limit, offset, filter),
     getItem: (id: string): Promise<ClipboardItem | null> =>
       ipcRenderer.invoke('store:get-item', id),
     getImagePreview: (id: string, mode: 'fast' | 'full' = 'fast'): Promise<string | null> =>
       ipcRenderer.invoke('store:get-image-preview', id, mode),
-    searchItems: (query: string): Promise<ClipboardItem[]> =>
-      ipcRenderer.invoke('store:search-items', query),
+    searchItems: (query: string, filter?: StoreFilter): Promise<ClipboardItem[]> =>
+      ipcRenderer.invoke('store:search-items', query, filter),
     getSnippets: (): Promise<ClipboardItem[]> =>
       ipcRenderer.invoke('store:get-snippets'),
     createSnippet: (keyword: string, content: string): Promise<ClipboardItem | null> =>

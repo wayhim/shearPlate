@@ -8,6 +8,7 @@ import {
   getClipboardItem,
   getClipboardItems,
   searchClipboardItems,
+  type ClipboardListFilter,
   stripClipboardItemPayload,
   toggleStar,
   deleteClipboardItem,
@@ -901,8 +902,8 @@ ipcMain.handle('settings:update', (_e, partial: Partial<AppSettings>) => {
 })
 
 // Store IPC
-ipcMain.handle('store:get-items', (_e, limit?: number, offset?: number) => {
-  return getClipboardItems(limit, offset)
+ipcMain.handle('store:get-items', (_e, limit?: number, offset?: number, filter?: ClipboardListFilter) => {
+  return getClipboardItems(limit, offset, filter ?? 'all')
 })
 ipcMain.handle('store:get-item', (_e, id: string) => {
   return getClipboardItem(id)
@@ -934,8 +935,8 @@ ipcMain.handle('store:get-image-preview', async (_e, id: string, mode: 'fast' | 
 
   return getStoredClipboardImagePreview(item, mode)
 })
-ipcMain.handle('store:search-items', (_e, query: string) => {
-  return searchClipboardItems(query)
+ipcMain.handle('store:search-items', (_e, query: string, filter?: ClipboardListFilter) => {
+  return searchClipboardItems(query, 50, filter ?? 'all')
 })
 ipcMain.handle('store:toggle-star', (_e, id: string) => {
   return toggleStar(id)

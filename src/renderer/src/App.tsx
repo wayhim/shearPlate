@@ -157,6 +157,8 @@ function ClipboardApp() {
   } = useClipboardStore()
   const { settings, isReady } = useManagedSettings()
   const searchTimer = useRef<ReturnType<typeof setTimeout>>()
+  const hoverSelectionFrameRef = useRef<number | null>(null)
+  const hoverPendingIdRef = useRef<string | null>(null)
   const panelLayoutRef = useRef<HTMLDivElement>(null)
   const resizeStateRef = useRef<{ startX: number; startListWidth: number } | null>(null)
   const resizeCleanupRef = useRef<(() => void) | null>(null)
@@ -184,27 +186,15 @@ function ClipboardApp() {
     setSearchFocusKey((prev) => prev + 1)
   }, [fetchItems, isReady, settings.historyRetentionDays, settings.maxHistory])
 
-  const filteredItems = useMemo(
-    () =>
-      filter === 'all'
-        ? items
-        : filter === 'starred'
-          ? items.filter((item) => item.isStarred)
-          : filter === 'snippet'
-            ? items.filter((item) => item.isSnippet)
-          : items.filter((item) => item.contentType === filter),
-    [filter, items]
-  )
-
   useEffect(() => {
-    if (!filteredItems.length) {
+    if (!items.length) {
       setSelectedId(null)
       setPreviewSelectedId(null)
       return
     }
 
-    setSelectedId((prev) => (prev && filteredItems.some((item) => item.id === prev) ? prev : filteredItems[0].id))
-  }, [filteredItems])
+    setSelectedId((prev) => (prev && items.some((item) => item.id === prev) ? prev : items[0].id))
+  }, [items])
 
   useEffect(() => {
     if (!selectedId) {
@@ -236,10 +226,10 @@ function ClipboardApp() {
     (nextFilter: FilterType) => {
       setFilter(nextFilter)
       if (query.trim()) {
-        void searchItems(query)
+        void searchItems(query, nextFilter)
         return
       }
-      void useClipboardStore.getState().fetchItems()
+      void useClipboardStore.getState().fetchItems(undefined, nextFilter)
     },
     [query, searchItems, setFilter]
   )
@@ -265,14 +255,24 @@ function ClipboardApp() {
   }, [])
 
   const handleHoverSelectItem = useCallback((id: string) => {
-    setSelectedId((prev) => (prev === id ? prev : id))
+    hoverPendingIdRef.current = id
+    if (hoverSelectionFrameRef.current !== null) {
+      return
+    }
+
+    hoverSelectionFrameRef.current = window.requestAnimationFrame(() => {
+      hoverSelectionFrameRef.current = null
+      const nextId = hoverPendingIdRef.current
+      if (!nextId) return
+      setSelectedId((prev) => (prev === nextId ? prev : nextId))
+    })
   }, [])
 
   const handleCreateSnippet = useCallback(async (keyword: string, content: string) => {
     return useClipboardStore.getState().handleCreateSnippet(keyword, content)
   }, [])
 
-  const visibleItems = filteredItems
+  const visibleItems = items
   const showSnippetComposer = filter === 'snippet'
   const isPreviewVisible = settings.showPreview
   const visibleItemIndexById = useMemo(() => {
@@ -346,6 +346,9 @@ function ClipboardApp() {
   useEffect(() => {
     return () => {
       clearTimeout(searchTimer.current)
+      if (hoverSelectionFrameRef.current !== null) {
+        window.cancelAnimationFrame(hoverSelectionFrameRef.current)
+      }
     }
   }, [])
 
@@ -579,7 +582,7 @@ function ClipboardApp() {
                   items={visibleItems}
                   loading={loading}
                   loadingMore={loadingMore}
-                  canLoadMore={hasMore && !query.trim() && filter !== 'starred' && filter !== 'snippet'}
+                  canLoadMore={hasMore && !query.trim()}
                   onLoadMore={loadMoreItems}
                   selectedId={selectedId}
                   onSelect={handleSelectItem}
