@@ -79,6 +79,7 @@ function configureSessionDataPath(): void {
 }
 
 configureSessionDataPath()
+app.setName('ShearPlate Helper')
 
 const gotSingleInstanceLock = app.requestSingleInstanceLock()
 
@@ -117,6 +118,28 @@ function applyWindowBackgroundColor(settings = getSafeSettings()): void {
   }
   if (settingsWindow && !settingsWindow.isDestroyed()) {
     settingsWindow.setBackgroundColor(color)
+  }
+}
+
+function applyOpenAtLoginSetting(enabled = getSafeSettings().openAtLogin): void {
+  if (process.platform !== 'darwin' && process.platform !== 'win32') {
+    return
+  }
+
+  try {
+    if (process.platform === 'darwin') {
+      app.setLoginItemSettings({
+        openAtLogin: Boolean(enabled),
+        openAsHidden: true
+      })
+      return
+    }
+
+    app.setLoginItemSettings({
+      openAtLogin: Boolean(enabled)
+    })
+  } catch (error) {
+    console.warn('[ShearPlate] Failed to update open-at-login setting:', error)
   }
 }
 
@@ -187,6 +210,10 @@ function normalizeSettingsPatch(partial: Partial<AppSettings>, current: AppSetti
 
   if (partial.showPreview !== undefined) {
     next.showPreview = Boolean(partial.showPreview)
+  }
+
+  if (partial.openAtLogin !== undefined) {
+    next.openAtLogin = Boolean(partial.openAtLogin)
   }
 
   return next
@@ -584,7 +611,7 @@ function createTrayImage() {
 function createTray(): Tray {
   const icon = createTrayImage()
   const t = new Tray(icon)
-  t.setToolTip('ShearPlate')
+  t.setToolTip(app.getName())
   trayMenu = buildTrayContextMenu()
   if (process.platform === 'darwin') {
     t.on('click', () => {
@@ -877,22 +904,25 @@ ipcMain.handle('settings:update', (_e, partial: Partial<AppSettings>) => {
   const currentSettings = getAppSettings()
   const normalizedPartial = normalizeSettingsPatch(partial, currentSettings)
 
+  let next: AppSettings
   if (normalizedPartial.shortcut !== undefined) {
     const nextShortcut = normalizedPartial.shortcut
     if (!nextShortcut || !registerShortcut(nextShortcut)) {
       throw new Error('Shortcut registration failed')
     }
 
-    const next = updateAppSettings({ ...normalizedPartial, shortcut: nextShortcut })
+    next = updateAppSettings({ ...normalizedPartial, shortcut: nextShortcut })
     if (currentSettings.shortcut !== nextShortcut) {
       console.log(`[ShearPlate] Shortcut updated to ${nextShortcut}`)
     }
-    applyWindowBackgroundColor(next)
-    broadcastSettingsChanged(next)
-    return next
+  } else {
+    next = updateAppSettings(normalizedPartial)
   }
 
-  const next = updateAppSettings(normalizedPartial)
+  if (normalizedPartial.openAtLogin !== undefined && currentSettings.openAtLogin !== next.openAtLogin) {
+    applyOpenAtLoginSetting(next.openAtLogin)
+  }
+
   if (normalizedPartial.maxHistory !== undefined || normalizedPartial.historyRetentionDays !== undefined) {
     applyClipboardRetentionPolicy()
   }
@@ -988,6 +1018,8 @@ if (gotSingleInstanceLock) {
     } catch (err) {
       console.error('[ShearPlate] Database init failed:', err)
     }
+
+    applyOpenAtLoginSetting()
 
     try {
       mainWindow = createWindow()

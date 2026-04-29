@@ -11,12 +11,13 @@
     "dist:mac:dir": "npm run build && electron-builder --mac dir --arm64 --publish never",
     "postinstall": "electron-builder install-app-deps",
     "typecheck": "tsc --noEmit",
-    "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
+    "dist:mac": "./scripts/release-mac.sh",
+    "dist:mac:unsigned": "npm run build && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --mac dmg zip --arm64 -c.mac.identity=null --publish never",
     "dist:win": "npm run build && electron-builder --win portable --x64 --publish never"
   },
   "build": {
     "appId": "com.wayhim.shearplate",
-    "productName": "ShearPlate",
+    "productName": "ShearPlate Helper",
     "icon": "resources/icons/icon.png",
     "compression": "maximum",
     "electronLanguages": [
@@ -48,10 +49,14 @@
         "to": "resources"
       }
     ],
+    "afterSign": "scripts/notarize.cjs",
     "mac": {
       "category": "public.app-category.productivity",
-      "identity": "-",
       "icon": "resources/icons/icon.icns",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "build/entitlements.mac.plist",
+      "entitlementsInherit": "build/entitlements.mac.inherit.plist",
       "extendInfo": {
         "LSUIElement": true
       }
@@ -72,18 +77,19 @@
     "@radix-ui/react-separator": "^1.1.1",
     "@radix-ui/react-slot": "^1.1.1",
     "@tanstack/react-virtual": "^3.13.4",
-    "sql.js": "^1.11.0",
     "lucide-react": "^0.469.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
+    "sql.js": "^1.11.0",
     "zustand": "^4.5.5"
   },
   "devDependencies": {
     "@electron-toolkit/tsconfig": "^1.0.1",
-    "@types/sql.js": "^1.4.9",
+    "@electron/notarize": "^3.1.1",
     "@types/node": "^22.10.0",
     "@types/react": "^18.3.12",
     "@types/react-dom": "^18.3.1",
+    "@types/sql.js": "^1.4.9",
     "@vitejs/plugin-react": "^4.3.4",
     "autoprefixer": "^10.4.20",
     "electron": "^33.2.1",

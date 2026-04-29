@@ -361,6 +361,23 @@ export function SettingsPanel({ language, settings, loading = false, onChange, o
               </SettingRow>
 
               <SettingRow
+                title={t(language, 'openAtLogin')}
+                description={settings.openAtLogin ? t(language, 'openAtLoginHintEnabled') : t(language, 'openAtLoginHintDisabled')}
+              >
+                <button
+                  type="button"
+                  onClick={() => onChange({ openAtLogin: !settings.openAtLogin })}
+                  className={`inline-flex h-10 min-w-[112px] items-center justify-center rounded-[11px] border px-4 text-[12px] font-medium tracking-[-0.01em] transition-colors ${
+                    settings.openAtLogin
+                      ? 'border-[var(--color-card-selected-border)] bg-[var(--color-window-edge-bg)] text-[var(--color-text-primary)]'
+                      : 'border-[var(--color-input-border)] bg-[var(--color-input-bg)] text-[var(--color-text-secondary)] hover:text-[var(--color-text-primary)]'
+                  }`}
+                >
+                  {settings.openAtLogin ? t(language, 'previewEnabled') : t(language, 'previewDisabled')}
+                </button>
+              </SettingRow>
+
+              <SettingRow
                 title={t(language, 'previewPanel')}
                 description={settings.showPreview ? t(language, 'previewToggleHint') : t(language, 'previewDisabled')}
               >

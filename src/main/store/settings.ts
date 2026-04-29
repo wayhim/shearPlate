@@ -12,7 +12,8 @@ const SETTING_KEYS: (keyof AppSettings)[] = [
   'showPreview',
   'maxHistory',
   'historyRetentionDays',
-  'shortcut'
+  'shortcut',
+  'openAtLogin'
 ]
 
 let cachedSettings: AppSettings | null = null
@@ -29,7 +30,7 @@ function parseSettingValue<K extends keyof AppSettings>(key: K, raw: string): Ap
     const numberValue = Number(raw)
     return (Number.isFinite(numberValue) ? numberValue : null) as AppSettings[K]
   }
-  if (key === 'showPreview') {
+  if (key === 'showPreview' || key === 'openAtLogin') {
     return (raw !== 'false') as AppSettings[K]
   }
   if (key === 'maxHistory' || key === 'historyRetentionDays') {

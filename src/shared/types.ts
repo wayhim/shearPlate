@@ -42,6 +42,7 @@ export interface AppSettings {
   maxHistory: number
   historyRetentionDays: number
   shortcut: string
+  openAtLogin: boolean
 }
 
 export const DEFAULT_APP_SETTINGS: AppSettings = {
@@ -52,5 +53,6 @@ export const DEFAULT_APP_SETTINGS: AppSettings = {
   showPreview: true,
   maxHistory: 120,
   historyRetentionDays: 7,
-  shortcut: 'Alt+V'
+  shortcut: 'Alt+V',
+  openAtLogin: false
 }

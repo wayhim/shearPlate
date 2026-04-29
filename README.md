@@ -125,7 +125,8 @@ npm run dev          # Start Electron in development mode
 npm run build        # Build main, preload, and renderer bundles
 npm run preview      # Preview production renderer build
 npm run typecheck    # Run TypeScript checks
-npm run dist:mac     # Build macOS dmg + zip artifacts
+npm run dist:mac     # Build signed + notarized macOS dmg + zip artifacts
+npm run dist:mac:unsigned # Build unsigned local macOS artifacts (not for distribution)
 npm run dist:mac:dir # Build unpacked macOS .app bundle
 npm run dist:win     # Build Windows portable artifact
 npm run restart:app  # Rebuild and restart the app locally
@@ -156,11 +157,48 @@ You may need to allow:
 
 If these permissions are missing, clipboard history still works, but automatic paste relay can fail.
 
+## Signed macOS Release (Required for Distribution)
+
+Unsigned macOS apps can be flagged as “damaged” by Gatekeeper after download. This project now treats signed + notarized builds as the default release path.
+
+1. Install a valid `Developer ID Application` certificate into your macOS keychain.
+2. Set notarization credentials with one of these methods:
+
+```bash
+# Option A: App Store Connect API key
+export APPLE_API_KEY="/absolute/path/AuthKey_XXXXXX.p8"
+export APPLE_API_KEY_ID="XXXXXX"
+export APPLE_API_ISSUER="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx"
+
+# Option B: Apple ID + app-specific password
+export APPLE_ID="your-apple-id@example.com"
+export APPLE_APP_SPECIFIC_PASSWORD="xxxx-xxxx-xxxx-xxxx"
+export APPLE_TEAM_ID="TEAMID1234"
+```
+
+Optional signing selector:
+
+```bash
+export CSC_NAME="Developer ID Application: Your Name (TEAMID1234)"
+```
+
+Build release artifacts:
+
+```bash
+npm run dist:mac
+```
+
+The release script validates:
+
+- code signature (`codesign --verify`)
+- Gatekeeper assessment (`spctl --assess`)
+- notarization stapling (`xcrun stapler validate`)
+
 ## Packaging Notes
 
 - macOS artifacts are written to `release/`
 - The app is configured as `LSUIElement`, so it behaves like a tray/menu-bar utility
-- The current macOS packaging config skips code signing in local builds
+- `npm run dist:mac` now requires signing + notarization credentials and fails fast if missing
 - Windows packaging currently targets a portable build
 
 ## Development Notes
