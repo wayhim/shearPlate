@@ -636,8 +636,12 @@ export const PreviewPanel = memo(function PreviewPanel({
   }, [preloadItems])
 
   useEffect(() => {
+    if (previewItem?.contentType === 'text') {
+      setIsExpanded(true)
+      return
+    }
     setIsExpanded(false)
-  }, [previewItem?.id])
+  }, [previewItem?.contentType, previewItem?.id])
 
   useEffect(() => {
     if (previewItem?.contentType !== 'file' || !previewItem.filePath) {

@@ -99,7 +99,7 @@ html, body, #root {
 }
 
 body {
-  font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
+  font-family: 'Segoe UI', 'PingFang SC', 'Microsoft YaHei UI', 'Microsoft YaHei', -apple-system, BlinkMacSystemFont, 'SF Pro Text', 'Helvetica Neue', sans-serif;
   font-size: 13px;
   line-height: 1.5;
   color: var(--color-text-primary);
@@ -111,6 +111,15 @@ body {
   overflow: hidden;
   user-select: none;
   transition: color 180ms cubic-bezier(0.25,0.1,0.25,1);
+}
+
+button,
+input,
+textarea,
+select,
+pre,
+code {
+  font-family: inherit;
 }
 
 #root {

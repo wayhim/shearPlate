@@ -682,9 +682,16 @@ function showPanel() {
   if (mainWindow.isMinimized()) {
     mainWindow.restore()
   }
+
+  if (process.platform === 'darwin') {
+    app.show()
+    app.focus({ steal: true })
+  }
+
   positionWindow(mainWindow, settings, { width, height, reservedWidth: PANEL_FULL_WIDTH })
   mainWindow.show()
   mainWindow.focus()
+  mainWindow.webContents.focus()
   mainWindow.moveTop()
 
   if (process.platform !== 'darwin') {
@@ -702,8 +709,10 @@ function showPanel() {
   }
   setTimeout(() => {
     if (!mainWindow || mainWindow.isDestroyed()) return
+    app.focus({ steal: true })
     mainWindow.moveTop()
     mainWindow.focus()
+    mainWindow.webContents.focus()
   }, 16)
   setTimeout(() => {
     if (!mainWindow || mainWindow.isDestroyed()) return
