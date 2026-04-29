@@ -1,8 +1,10 @@
 # ShearPlate
 
+[English](./README.md) | [简体中文](./README.zh-CN.md)
+
 ShearPlate is a clipboard manager built with Electron, React, and TypeScript. It runs primarily as a tray app, captures clipboard history locally, and lets you quickly search, preview, copy, and paste recent items back into the active input target.
 
-Current version: `0.1.1`
+Current version: `0.1.2`
 
 ## What It Does
 
@@ -17,7 +19,7 @@ Current version: `0.1.1`
 
 ## Status
 
-This repository is currently a local-first clipboard tool. The data model already contains some device-related fields, but the current app behavior is still single-device and local-only. Cross-device sync is not part of `0.1.1`.
+This repository is currently a local-first clipboard tool. The data model already contains some device-related fields, but the current app behavior is still single-device and local-only. Cross-device sync is not part of `0.1.2`.
 
 ## Tech Stack
 
@@ -145,7 +147,7 @@ open release/mac-arm64/ShearPlate.app
 
 If you want the app to behave like a normal installed app, copy `release/mac-arm64/ShearPlate.app` into `/Applications/ShearPlate.app` and launch that version.
 
-If macOS reports the app is damaged, you can remove the quarantine flag as a temporary workaround:
+If macOS reports the app is damaged, you can remove the quarantine flag as a temporary workaround.
 
 ```bash
 # Move the app to Applications first
