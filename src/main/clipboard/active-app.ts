@@ -1,9 +1,12 @@
 import { execFile, execFileSync } from 'child_process'
+import { dialog, shell, systemPreferences } from 'electron'
 
 const UNKNOWN_APP = 'Unknown'
+let hasShownMacPastePermissionDialog = false
 
 export interface PasteTargetContext {
   appName: string | null
+  macProcessId: number | null
   windowsProcessId: number | null
   windowsWindowHandle: string | null
 }
@@ -34,6 +37,26 @@ function runPowerShell(script: string, timeout = 450): string {
     ).trim()
   } catch {
     return ''
+  }
+}
+
+function getForegroundAppContextMac(): { appName: string | null; processId: number | null } {
+  if (process.platform !== 'darwin') {
+    return { appName: null, processId: null }
+  }
+
+  const result = runAppleScript(
+    ['tell application "System Events" to tell first application process whose frontmost is true to return {name, unix id}'],
+    400
+  )
+
+  const [appNameRaw, processIdRaw] = result.split(',')
+  const appName = appNameRaw?.trim() || null
+  const processId = Number(processIdRaw?.trim())
+
+  return {
+    appName,
+    processId: Number.isInteger(processId) && processId > 0 ? processId : null
   }
 }
 
@@ -74,18 +97,17 @@ export function getFrontmostAppName(): string {
     return UNKNOWN_APP
   }
 
-  const appName = runAppleScript(
-    ['tell application "System Events" to return name of first application process whose frontmost is true'],
-    400
-  )
+  const { appName } = getForegroundAppContextMac()
 
   return appName || UNKNOWN_APP
 }
 
 export function capturePasteTargetContext(): PasteTargetContext {
   if (process.platform === 'darwin') {
+    const { appName, processId } = getForegroundAppContextMac()
     return {
-      appName: getFrontmostAppName(),
+      appName,
+      macProcessId: processId,
       windowsProcessId: null,
       windowsWindowHandle: null
     }
@@ -98,6 +120,7 @@ export function capturePasteTargetContext(): PasteTargetContext {
     }
     return {
       appName: null,
+      macProcessId: null,
       windowsProcessId: processId,
       windowsWindowHandle: windowHandle
     }
@@ -105,6 +128,7 @@ export function capturePasteTargetContext(): PasteTargetContext {
 
   return {
     appName: null,
+    macProcessId: null,
     windowsProcessId: null,
     windowsWindowHandle: null
   }
@@ -163,45 +187,113 @@ $KEYUP = 0x0002
 `
 }
 
-function execFileAsync(command: string, args: string[], timeout: number, label: string): Promise<boolean> {
+function openMacPrivacySettings(section: 'Accessibility' | 'Automation'): void {
+  void shell.openExternal(`x-apple.systempreferences:com.apple.preference.security?Privacy_${section}`)
+}
+
+function promptForMacPastePermissions(errorDetails: string): void {
+  if (process.platform !== 'darwin' || hasShownMacPastePermissionDialog) {
+    return
+  }
+
+  hasShownMacPastePermissionDialog = true
+  systemPreferences.isTrustedAccessibilityClient(true)
+
+  void dialog.showMessageBox({
+    type: 'warning',
+    buttons: ['打开辅助功能设置', '打开自动化设置', '稍后处理'],
+    defaultId: 0,
+    cancelId: 2,
+    title: 'ShearPlate 需要 macOS 权限',
+    message: '自动粘贴到当前输入区域需要额外系统权限。',
+    detail: [
+      '请在“系统设置 -> 隐私与安全性”中允许 ShearPlate 发送按键。',
+      '如果系统还提示自动化，也需要允许 ShearPlate 控制 “System Events” 和目标应用。',
+      '',
+      `最近一次系统错误：${errorDetails}`
+    ].join('\n')
+  }).then(({ response }) => {
+    if (response === 0) {
+      openMacPrivacySettings('Accessibility')
+      return
+    }
+
+    if (response === 1) {
+      openMacPrivacySettings('Automation')
+    }
+  })
+}
+
+function ensureMacPastePermissions(): boolean {
+  if (process.platform !== 'darwin') {
+    return true
+  }
+
+  const trusted = systemPreferences.isTrustedAccessibilityClient(false)
+  if (trusted) {
+    return true
+  }
+
+  promptForMacPastePermissions('当前应用尚未获得“辅助功能”权限。')
+  return false
+}
+
+function execFileAsync(command: string, args: string[], timeout: number, label: string): Promise<{ ok: boolean; details: string }> {
   return new Promise((resolve) => {
     execFile(command, args, { timeout, encoding: 'utf8' }, (error, stdout, stderr) => {
       if (error) {
         const details = [error.message, stderr?.trim(), stdout?.trim()].filter(Boolean).join(' | ')
         console.warn(`[ShearPlate] ${label} failed: ${details}`)
-        resolve(false)
+        resolve({ ok: false, details })
         return
       }
 
-      resolve(true)
+      resolve({ ok: true, details: '' })
     })
   })
 }
 
 export async function pasteIntoPreviousTarget(target: PasteTargetContext | null): Promise<boolean> {
   if (process.platform === 'darwin') {
-    const appName = target?.appName ?? null
-    const resolvedAppName = appName && appName !== UNKNOWN_APP ? escapeAppleScriptString(appName) : null
+    if (!ensureMacPastePermissions()) {
+      return false
+    }
 
-    return execFileAsync(
+    const appName = target?.appName ?? null
+    const targetPid = typeof target?.macProcessId === 'number' && target.macProcessId > 0 ? target.macProcessId : 0
+    const resolvedAppName = appName && appName !== UNKNOWN_APP ? escapeAppleScriptString(appName) : ''
+
+    const result = await execFileAsync(
       'osascript',
-      resolvedAppName
+      targetPid > 0 || resolvedAppName
         ? [
             '-e',
             `
+            set targetPid to ${targetPid}
+            set targetActivated to false
             set targetAppName to "${resolvedAppName}"
             tell application "System Events"
-              set currentFrontName to name of first application process whose frontmost is true
+              if targetPid > 0 and exists (first application process whose unix id is targetPid) then
+                set frontmost of first application process whose unix id is targetPid to true
+              else if targetAppName is not "" then
+                tell application targetAppName to activate
+              end if
             end tell
-            if currentFrontName is not targetAppName then tell application targetAppName to activate
-            repeat 15 times
+            repeat 20 times
               tell application "System Events"
-                set currentFrontName to name of first application process whose frontmost is true
+                if targetPid > 0 and exists (first application process whose unix id is targetPid) then
+                  set targetActivated to frontmost of first application process whose unix id is targetPid
+                else if targetAppName is not "" then
+                  set targetActivated to name of first application process whose frontmost is true is targetAppName
+                else
+                  set targetActivated to true
+                end if
               end tell
-              if currentFrontName is targetAppName then exit repeat
-              delay 0.04
+              if targetActivated then exit repeat
+              delay 0.03
             end repeat
-            if currentFrontName is not targetAppName then error "Target app never became frontmost (" & currentFrontName & ")"
+            if not targetActivated then error "Target app never became frontmost"
+            delay 0.05
             tell application "System Events"
               key code 9 using command down
             end tell
@@ -218,13 +310,19 @@ export async function pasteIntoPreviousTarget(target: PasteTargetContext | null)
       2200,
       'paste relay'
     )
+
+    if (!result.ok && /\(1002\)|not allowed|不允许发送按键/i.test(result.details)) {
+      promptForMacPastePermissions(result.details)
+    }
+
+    return result.ok
   }
 
   if (process.platform === 'win32') {
     if (!appIsPackaged()) {
       console.log('[ShearPlate] Windows paste relay target', target)
     }
-    return execFileAsync(
+    const result = await execFileAsync(
       'powershell',
       [
         '-Sta',
@@ -236,6 +334,7 @@ export async function pasteIntoPreviousTarget(target: PasteTargetContext | null)
       1600,
       'paste relay'
     )
+    return result.ok
   }
 
   return false

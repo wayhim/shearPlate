@@ -79,6 +79,12 @@ function configureSessionDataPath(): void {
 
 configureSessionDataPath()
 
+const gotSingleInstanceLock = app.requestSingleInstanceLock()
+
+if (!gotSingleInstanceLock) {
+  app.exit(0)
+}
+
 function isImageFilePath(filePath: string | null | undefined): boolean {
   if (!filePath) return false
   return IMAGE_FILE_PATH_PATTERN.test(filePath)
@@ -737,6 +743,21 @@ function showPanel() {
   }, 40)
 }
 
+function focusPrimaryInstance(): void {
+  if (!app.isReady()) {
+    app.once('ready', () => {
+      focusPrimaryInstance()
+    })
+    return
+  }
+
+  if (settingsWindow && !settingsWindow.isDestroyed() && settingsWindow.isVisible()) {
+    settingsWindow.hide()
+  }
+
+  showPanel()
+}
+
 async function commitSelection(item: ClipboardItem): Promise<boolean> {
   const touchedItem = touchClipboardItem(item.id)
   if (touchedItem && mainWindow && !mainWindow.isDestroyed()) {
@@ -936,69 +957,76 @@ ipcMain.handle('store:get-starred', () => {
 })
 
 // App lifecycle
-app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.shearplate')
-  if (process.platform === 'darwin') {
-    app.dock.hide()
-  }
-  registerClipboardImageProtocol()
-  nativeTheme.on('updated', () => {
-    const settings = getSafeSettings()
-    if (settings.theme === 'system') {
-      applyWindowBackgroundColor(settings)
-    }
+if (gotSingleInstanceLock) {
+  app.on('second-instance', () => {
+    focusPrimaryInstance()
   })
-  console.log('[ShearPlate] App ready, initializing...')
 
-  try {
-    await initDatabase()
-    const removed = dedupeClipboardItems()
-    if (removed > 0) {
-      console.log(`[ShearPlate] Dedupe removed ${removed} duplicated clipboard item(s)`)
+  app.whenReady().then(async () => {
+    electronApp.setAppUserModelId('com.shearplate')
+    if (process.platform === 'darwin') {
+      app.dock.hide()
     }
-    applyClipboardRetentionPolicy()
-    console.log('[ShearPlate] Database initialized')
-  } catch (err) {
-    console.error('[ShearPlate] Database init failed:', err)
-  }
+    registerClipboardImageProtocol()
+    nativeTheme.on('updated', () => {
+      const settings = getSafeSettings()
+      if (settings.theme === 'system') {
+        applyWindowBackgroundColor(settings)
+      }
+    })
+    console.log('[ShearPlate] App ready, initializing...')
 
-  try {
-    mainWindow = createWindow()
-    console.log('[ShearPlate] Window prepared')
-  } catch (err) {
-    console.error('[ShearPlate] Window preparation failed:', err)
-  }
+    try {
+      await initDatabase()
+      const removed = dedupeClipboardItems()
+      if (removed > 0) {
+        console.log(`[ShearPlate] Dedupe removed ${removed} duplicated clipboard item(s)`)
+      }
+      applyClipboardRetentionPolicy()
+      console.log('[ShearPlate] Database initialized')
+    } catch (err) {
+      console.error('[ShearPlate] Database init failed:', err)
+    }
 
-  try {
-    tray = createTray()
-    console.log('[ShearPlate] Tray created')
-  } catch (err) {
-    console.error('[ShearPlate] Tray creation failed:', err)
-  }
-
-  if (registerShortcut()) {
-    console.log(`[ShearPlate] Shortcut registered (${activeShortcut})`)
-  } else if (
-    getAppSettings().shortcut !== DEFAULT_APP_SETTINGS.shortcut &&
-    registerShortcut(DEFAULT_APP_SETTINGS.shortcut)
-  ) {
-    updateAppSettings({ shortcut: DEFAULT_APP_SETTINGS.shortcut })
-    console.warn(`[ShearPlate] Falling back to default shortcut (${DEFAULT_APP_SETTINGS.shortcut})`)
-  } else {
-    console.error('[ShearPlate] Failed to register global shortcut')
-  }
-
-  startClipboardWatcher()
-  console.log('[ShearPlate] Clipboard watcher started — app running in tray')
-
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    try {
       mainWindow = createWindow()
+      console.log('[ShearPlate] Window prepared')
+    } catch (err) {
+      console.error('[ShearPlate] Window preparation failed:', err)
     }
+
+    try {
+      tray = createTray()
+      console.log('[ShearPlate] Tray created')
+    } catch (err) {
+      console.error('[ShearPlate] Tray creation failed:', err)
+    }
+
+    if (registerShortcut()) {
+      console.log(`[ShearPlate] Shortcut registered (${activeShortcut})`)
+    } else if (
+      getAppSettings().shortcut !== DEFAULT_APP_SETTINGS.shortcut &&
+      registerShortcut(DEFAULT_APP_SETTINGS.shortcut)
+    ) {
+      updateAppSettings({ shortcut: DEFAULT_APP_SETTINGS.shortcut })
+      console.warn(`[ShearPlate] Falling back to default shortcut (${DEFAULT_APP_SETTINGS.shortcut})`)
+    } else {
+      console.error('[ShearPlate] Failed to register global shortcut')
+    }
+
+    startClipboardWatcher()
+    console.log('[ShearPlate] Clipboard watcher started — app running in tray')
+
+    app.on('activate', () => {
+      if (BrowserWindow.getAllWindows().length === 0) {
+        mainWindow = createWindow()
+      }
+      focusPrimaryInstance()
+    })
+  }).catch(err => {
+    console.error('[ShearPlate] Fatal startup error:', err)
   })
-}).catch(err => {
-  console.error('[ShearPlate] Fatal startup error:', err)
-})
+}
 
 app.on('window-all-closed', () => {
   // Keep running in tray on macOS

@@ -6,3 +6,4 @@ release/
 resources/iconset/
 .DS_Store
 *.log
+.runtime/

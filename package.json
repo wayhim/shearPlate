@@ -7,6 +7,8 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
+    "restart:app": "./scripts/restart-app.sh",
+    "dist:mac:dir": "npm run build && electron-builder --mac dir --arm64 --publish never",
     "postinstall": "electron-builder install-app-deps",
     "typecheck": "tsc --noEmit",
     "dist:mac": "npm run build && electron-builder --mac dmg zip --publish never",
